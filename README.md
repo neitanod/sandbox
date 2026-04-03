@@ -34,14 +34,10 @@ sandbox myproject -- "cd src && ls -la"
 
 # List all sandboxes
 sandbox list
-
-```
     NAME       IMAGE    STATUS   DESCRIPTION
     myproject  node:25  running  Sketchy npm package from Reddit
-```
 
 # Stop, remove, clean up
-```
 sandbox stop myproject
 sandbox rm myproject            # Config file is kept, you can rebuild later with the same settings
 sandbox rm myproject --forget   # Config file is also destroyed

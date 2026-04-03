@@ -43,6 +43,23 @@ sandbox rm myproject            # Config file is kept, you can rebuild later wit
 sandbox rm myproject --forget   # Config file is also destroyed
 ```
 
+### Customizing with setup commands
+
+You can install packages inside the container by adding setup commands to the config. These run during `docker build` and become part of the container image.
+
+```bash
+# Add zsh to an existing sandbox
+sandbox config myproject setup + "apk add --no-cache zsh"
+
+# Rebuild to apply (generates a Dockerfile and builds it)
+sandbox myproject --rebuild
+
+# Or set it up before the first build
+sandbox config myproject setup + "apk add --no-cache zsh curl git"
+sandbox config myproject mounts + ~/repos/sketchy-repo:/workspace
+sandbox myproject --build
+```
+
 ## Usage
 
 ```
@@ -175,6 +192,23 @@ sandbox list
 # Frenar, borrar, limpiar
 sandbox stop miproyecto
 sandbox rm miproyecto
+```
+
+### Personalizar con comandos de setup
+
+Podes instalar paquetes dentro del contenedor agregando comandos de setup al config. Se ejecutan durante el `docker build` y quedan como parte de la imagen.
+
+```bash
+# Agregar zsh a un sandbox existente
+sandbox config miproyecto setup + "apk add --no-cache zsh"
+
+# Rebuild para que aplique (genera un Dockerfile y lo buildea)
+sandbox miproyecto --rebuild
+
+# O configurarlo antes del primer build
+sandbox config miproyecto setup + "apk add --no-cache zsh curl git"
+sandbox config miproyecto mounts + ~/repos/repo-sospechoso:/workspace
+sandbox miproyecto --build
 ```
 
 ## Uso

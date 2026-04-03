@@ -18,10 +18,10 @@ Requires Docker to be installed and running.
 cd ~/repos/sketchy-repo
 
 # Create and enter a sandbox (mounts current dir to /workspace)
-sandbox myproject --build --description "Sketchy npm package from Reddit"
+sandbox build myproject --description "Sketchy npm package from Reddit"
 
 # Or create and enter, using a specific base image
-sandbox myproject --build --image node:20 --description "Sketchy npm package from Reddit"
+sandbox build myproject --image node:20 --description "Sketchy npm package from Reddit"
 
 # Once created, enter the container anytime
 sandbox myproject
@@ -35,7 +35,7 @@ sandbox myproject -- "cd src && ls -la"
 # List all sandboxes
 sandbox list
     NAME       IMAGE    STATUS   DESCRIPTION
-    myproject  node:25  running  Sketchy npm package from Reddit
+    myproject  node:20  running  Sketchy npm package from Reddit
 
 # Stop, remove, clean up
 sandbox stop myproject
@@ -52,32 +52,35 @@ You can install packages inside the container by adding setup commands to the co
 sandbox config myproject setup + "apk add --no-cache zsh"
 
 # Rebuild to apply (generates a Dockerfile and builds it)
-sandbox myproject --rebuild
+sandbox rebuild myproject
 
 # Or set it up before the first build
 sandbox config myproject setup + "apk add --no-cache zsh curl git"
 sandbox config myproject mounts + ~/repos/sketchy-repo:/workspace
-sandbox myproject --build
+sandbox build myproject
 ```
 
 ## Usage
 
 ```
-sandbox <name> [--build|--rebuild] [--ephemeral] [--exit] [--image <img>] [--config <path>] [--description "text"] [-- <cmd>]
+sandbox <name> [--ephemeral] [--config <path>] [-- <cmd>]
+sandbox build <name> [--exit] [--image <img>] [--config <path>] [--description "text"]
+sandbox rebuild <name> [--exit] [--image <img>] [--config <path>] [--description "text"]
 sandbox list
 sandbox stop <name>
 sandbox rm <name> [--forget [-y]]
 sandbox rm --orphans [-y]
 sandbox config <name> [<key>] [<value>]
+sandbox edit <name>
 ```
 
 ### Lifecycle
 
 | Command | What it does |
 |---------|-------------|
-| `sandbox foo --build` | Create container (fails if exists). Enters shell after. |
-| `sandbox foo --rebuild` | Destroy and recreate from scratch. Enters shell after. |
-| `sandbox foo --build --exit` | Create without entering (for scripts). |
+| `sandbox build foo` | Create container (fails if exists). Enters shell after. |
+| `sandbox rebuild foo` | Destroy and recreate from scratch. Enters shell after. |
+| `sandbox build foo --exit` | Create without entering (for scripts). |
 | `sandbox foo` | Start and enter existing container. |
 | `sandbox foo -- <cmd>` | Run a command in the container. |
 | `sandbox foo --ephemeral` | Disposable session (`docker run --rm`). |
@@ -85,10 +88,11 @@ sandbox config <name> [<key>] [<value>]
 | `sandbox rm foo` | Remove container + custom image. Keep config. |
 | `sandbox rm foo --forget` | Remove everything including config (asks confirmation). |
 | `sandbox rm --orphans` | Clean up containers whose config was deleted. |
+| `sandbox edit foo` | Open JSON config in $EDITOR. |
 
 ### Configuration
 
-Configs live in `~/.config/sandbox/<name>.json`. Created automatically on first `--build` (mounts pwd to `/workspace`).
+Configs live in `~/.config/sandbox/<name>.json`. Created automatically on first `sandbox build` (mounts pwd to `/workspace`).
 
 Manage from CLI:
 
@@ -100,6 +104,7 @@ sandbox config myapp ports + 3000:3000              # Add port
 sandbox config myapp setup + "apk add git"          # Add setup command
 sandbox config myapp security.drop_caps true        # Enable security option
 sandbox config myapp mounts - /path:/workspace      # Remove mount
+sandbox edit myapp                                  # Open config in $EDITOR
 ```
 
 ### JSON Structure
@@ -175,10 +180,13 @@ Requiere Docker instalado y corriendo.
 cd ~/repos/repo-sospechoso
 
 # Crea y entra a un sandbox (monta el directorio actual en /workspace)
-sandbox miproyecto --build
+sandbox build miproyecto --description "Paquete npm sospechoso de Reddit"
 
 # Usa una imagen base especifica
-sandbox miproyecto --build --image node:20
+sandbox build miproyecto --image node:20
+
+# Una vez creado, entra al contenedor cuando quieras
+sandbox miproyecto
 
 # Ejecuta un comando adentro
 sandbox miproyecto -- npm install
@@ -191,7 +199,8 @@ sandbox list
 
 # Frenar, borrar, limpiar
 sandbox stop miproyecto
-sandbox rm miproyecto
+sandbox rm miproyecto            # El config se mantiene, podes rebuild despues
+sandbox rm miproyecto --forget   # Tambien borra el config
 ```
 
 ### Personalizar con comandos de setup
@@ -203,32 +212,35 @@ Podes instalar paquetes dentro del contenedor agregando comandos de setup al con
 sandbox config miproyecto setup + "apk add --no-cache zsh"
 
 # Rebuild para que aplique (genera un Dockerfile y lo buildea)
-sandbox miproyecto --rebuild
+sandbox rebuild miproyecto
 
 # O configurarlo antes del primer build
 sandbox config miproyecto setup + "apk add --no-cache zsh curl git"
 sandbox config miproyecto mounts + ~/repos/repo-sospechoso:/workspace
-sandbox miproyecto --build
+sandbox build miproyecto
 ```
 
 ## Uso
 
 ```
-sandbox <nombre> [--build|--rebuild] [--ephemeral] [--exit] [--image <img>] [--config <path>] [--description "texto"] [-- <cmd>]
+sandbox <nombre> [--ephemeral] [--config <path>] [-- <cmd>]
+sandbox build <nombre> [--exit] [--image <img>] [--config <path>] [--description "texto"]
+sandbox rebuild <nombre> [--exit] [--image <img>] [--config <path>] [--description "texto"]
 sandbox list
 sandbox stop <nombre>
 sandbox rm <nombre> [--forget [-y]]
 sandbox rm --orphans [-y]
 sandbox config <nombre> [<key>] [<valor>]
+sandbox edit <nombre>
 ```
 
 ### Ciclo de vida
 
 | Comando | Que hace |
 |---------|----------|
-| `sandbox foo --build` | Crea el contenedor (falla si ya existe). Entra al shell. |
-| `sandbox foo --rebuild` | Destruye y recrea desde cero. Entra al shell. |
-| `sandbox foo --build --exit` | Crea sin entrar (para scripts). |
+| `sandbox build foo` | Crea el contenedor (falla si ya existe). Entra al shell. |
+| `sandbox rebuild foo` | Destruye y recrea desde cero. Entra al shell. |
+| `sandbox build foo --exit` | Crea sin entrar (para scripts). |
 | `sandbox foo` | Arranca y entra al contenedor existente. |
 | `sandbox foo -- <cmd>` | Ejecuta un comando en el contenedor. |
 | `sandbox foo --ephemeral` | Sesion descartable (`docker run --rm`). |
@@ -236,10 +248,11 @@ sandbox config <nombre> [<key>] [<valor>]
 | `sandbox rm foo` | Borra contenedor + imagen custom. Mantiene config. |
 | `sandbox rm foo --forget` | Borra todo incluido el config (pide confirmacion). |
 | `sandbox rm --orphans` | Limpia contenedores cuyo config fue borrado. |
+| `sandbox edit foo` | Abre el JSON de config en $EDITOR. |
 
 ### Configuracion
 
-Los configs viven en `~/.config/sandbox/<nombre>.json`. Se crean automaticamente en el primer `--build` (monta el pwd en `/workspace`).
+Los configs viven en `~/.config/sandbox/<nombre>.json`. Se crean automaticamente en el primer `sandbox build` (monta el pwd en `/workspace`).
 
 Gestionar desde CLI:
 
@@ -251,6 +264,7 @@ sandbox config myapp ports + 3000:3000              # Agregar puerto
 sandbox config myapp setup + "apk add git"          # Agregar comando de setup
 sandbox config myapp security.drop_caps true        # Habilitar opcion de seguridad
 sandbox config myapp mounts - /path:/workspace      # Quitar mount
+sandbox edit myapp                                  # Abrir config en $EDITOR
 ```
 
 ### Estructura del JSON

@@ -16,6 +16,16 @@ func main() {
 	}
 
 	switch args[0] {
+	case "build":
+		if len(args) < 2 {
+			fatal("usage: sandbox build <name> [--exit] [--image <img>] [--config <path>] [--description \"text\"]")
+		}
+		cmdBuild(args[1], args[2:], false)
+	case "rebuild":
+		if len(args) < 2 {
+			fatal("usage: sandbox rebuild <name> [--exit] [--image <img>] [--config <path>] [--description \"text\"]")
+		}
+		cmdBuild(args[1], args[2:], true)
 	case "list":
 		cmdList()
 	case "stop":
@@ -30,11 +40,105 @@ func main() {
 			fatal("usage: sandbox config <name> [<key>] [<value>]")
 		}
 		cmdConfig(args[1:])
+	case "edit":
+		if len(args) < 2 {
+			fatal("usage: sandbox edit <name>")
+		}
+		cmdEdit(args[1])
 	case "help", "--help", "-h":
 		printUsage()
 	default:
-		// Default: sandbox <name> [flags] [-- cmd...]
+		// Default: sandbox <name> [--ephemeral] [--config <path>] [-- cmd...]
 		cmdRun(args)
+	}
+}
+
+// parseBuildFlags parses flags common to build and rebuild subcommands
+type buildFlags struct {
+	exitAfter   bool
+	configPath  string
+	description string
+	image       string
+}
+
+func parseBuildFlags(args []string) buildFlags {
+	var f buildFlags
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--exit":
+			f.exitAfter = true
+		case "--config":
+			if i+1 >= len(args) {
+				fatal("--config requires a path")
+			}
+			i++
+			f.configPath = args[i]
+		case "--description":
+			if i+1 >= len(args) {
+				fatal("--description requires a value")
+			}
+			i++
+			f.description = args[i]
+		case "--image":
+			if i+1 >= len(args) {
+				fatal("--image requires a value")
+			}
+			i++
+			f.image = args[i]
+		default:
+			fatal("unknown flag: %s", args[i])
+		}
+	}
+	return f
+}
+
+func cmdBuild(name string, args []string, rebuild bool) {
+	f := parseBuildFlags(args)
+
+	cfg, err := LoadConfig(name, f.configPath)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			// Create a minimal config with pwd mounted at /workspace
+			cfg = NewDefaultConfig()
+			pwd, pwdErr := os.Getwd()
+			if pwdErr != nil {
+				fatal("cannot get working directory: %v", pwdErr)
+			}
+			cfg.Mounts = []MountConfig{{Host: pwd, Container: "/workspace"}}
+			cfg.Workdir = "/workspace"
+			if f.image != "" {
+				cfg.Image = f.image
+			}
+			if f.description != "" {
+				cfg.Description = f.description
+			}
+			if saveErr := SaveConfig(name, cfg); saveErr != nil {
+				fatal("cannot create config for %q: %v", name, saveErr)
+			}
+			fmt.Printf("created minimal config at %s (mounting %s -> /workspace)\n", DefaultConfigPath(name), pwd)
+		} else {
+			fatal("cannot load config for %q: %v", name, err)
+		}
+	}
+
+	// CLI overrides (for existing configs)
+	if f.image != "" {
+		cfg.Image = f.image
+	}
+	if f.description != "" {
+		cfg.Description = f.description
+	}
+
+	containerName := ContainerName(name)
+
+	if rebuild {
+		doRebuild(name, containerName, cfg)
+	} else {
+		doBuild(name, containerName, cfg)
+	}
+
+	if !f.exitAfter {
+		doRun(containerName, cfg, nil)
 	}
 }
 
@@ -43,44 +147,21 @@ func cmdRun(args []string) {
 	rest := args[1:]
 
 	var (
-		build       bool
-		rebuild     bool
-		ephemeral   bool
-		exitAfter   bool
-		configPath  string
-		description string
-		image       string
-		userCmd     []string
+		ephemeral  bool
+		configPath string
+		userCmd    []string
 	)
 
 	for i := 0; i < len(rest); i++ {
 		switch rest[i] {
-		case "--build":
-			build = true
-		case "--rebuild":
-			rebuild = true
 		case "--ephemeral":
 			ephemeral = true
-		case "--exit":
-			exitAfter = true
 		case "--config":
 			if i+1 >= len(rest) {
 				fatal("--config requires a path")
 			}
 			i++
 			configPath = rest[i]
-		case "--description":
-			if i+1 >= len(rest) {
-				fatal("--description requires a value")
-			}
-			i++
-			description = rest[i]
-		case "--image":
-			if i+1 >= len(rest) {
-				fatal("--image requires a value")
-			}
-			i++
-			image = rest[i]
 		case "--":
 			userCmd = rest[i+1:]
 			i = len(rest) // break loop
@@ -92,61 +173,17 @@ func cmdRun(args []string) {
 	cfg, err := LoadConfig(name, configPath)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			if build || rebuild {
-				// Create a minimal config with pwd mounted at /workspace
-				cfg = NewDefaultConfig()
-				pwd, pwdErr := os.Getwd()
-				if pwdErr != nil {
-					fatal("cannot get working directory: %v", pwdErr)
-				}
-				cfg.Mounts = []MountConfig{{Host: pwd, Container: "/workspace"}}
-				cfg.Workdir = "/workspace"
-				if image != "" {
-					cfg.Image = image
-				}
-				if description != "" {
-					cfg.Description = description
-				}
-				if saveErr := SaveConfig(name, cfg); saveErr != nil {
-					fatal("cannot create config for %q: %v", name, saveErr)
-				}
-				fmt.Printf("created minimal config at %s (mounting %s -> /workspace)\n", DefaultConfigPath(name), pwd)
-			} else if ephemeral {
-				// Use defaults in memory, don't save
+			if ephemeral {
 				cfg = NewDefaultConfig()
 			} else {
-				fatal("config not found for %q. Create it with: sandbox %s --build", name, name)
+				fatal("config not found for %q. Create it with: sandbox build %s", name, name)
 			}
 		} else {
 			fatal("cannot load config for %q: %v", name, err)
 		}
 	}
 
-	// CLI overrides
-	if image != "" && cfg != nil {
-		cfg.Image = image
-	}
-	if description != "" && cfg != nil {
-		cfg.Description = description
-	}
-
 	containerName := ContainerName(name)
-
-	if rebuild {
-		doRebuild(name, containerName, cfg)
-		if !exitAfter {
-			doRun(containerName, cfg, userCmd)
-		}
-		return
-	}
-
-	if build {
-		doBuild(name, containerName, cfg)
-		if !exitAfter {
-			doRun(containerName, cfg, userCmd)
-		}
-		return
-	}
 
 	if ephemeral {
 		doEphemeral(name, containerName, cfg, userCmd)
@@ -154,12 +191,12 @@ func cmdRun(args []string) {
 	}
 
 	// Default: run/exec
-	doRun(containerName, cfg, userCmd)
+	doExec(containerName, cfg, userCmd)
 }
 
 func doBuild(name, containerName string, cfg *SandboxConfig) {
 	if containerExists(containerName) {
-		fatal("container %q already exists, use --rebuild to recreate", containerName)
+		fatal("container %q already exists, use 'sandbox rebuild %s' to recreate", containerName, name)
 	}
 
 	imageName := buildImageIfNeeded(name, cfg)
@@ -193,7 +230,15 @@ func doEphemeral(name, containerName string, cfg *SandboxConfig, userCmd []strin
 
 func doRun(containerName string, cfg *SandboxConfig, userCmd []string) {
 	if !containerExists(containerName) {
-		fatal("container %q does not exist, use --build to create it", containerName)
+		return // container just created, not started yet — start + exec
+	}
+	doExec(containerName, cfg, userCmd)
+}
+
+func doExec(containerName string, cfg *SandboxConfig, userCmd []string) {
+	if !containerExists(containerName) {
+		name := SandboxNameFromContainer(containerName)
+		fatal("container %q does not exist, use 'sandbox build %s' to create it", containerName, name)
 	}
 
 	state := containerState(containerName)
@@ -294,25 +339,34 @@ func printUsage() {
 	fmt.Println(`sandbox - Docker container manager via JSON configs
 
 Usage:
-  sandbox <name> [--build|--rebuild] [--ephemeral] [--config <path>] [--description "text"] [-- <cmd>]
+  sandbox <name> [--ephemeral] [--config <path>] [-- <cmd>]
+  sandbox build <name> [--exit] [--image <img>] [--config <path>] [--description "text"]
+  sandbox rebuild <name> [--exit] [--image <img>] [--config <path>] [--description "text"]
   sandbox list
   sandbox stop <name>
   sandbox rm <name> [--forget [-y]]
   sandbox rm --orphans [-y]
   sandbox config <name> [<key>] [<value>]
-
-Flags:
-  --build         Create a new container (fails if already exists)
-  --rebuild       Destroy and recreate from scratch
-  --ephemeral     Run a disposable container (--rm)
-  --config <path> Use a specific JSON config instead of ~/.config/sandbox/<name>.json
-  --description   Set description (overrides JSON, used with --build/--rebuild)
+  sandbox edit <name>
 
 Subcommands:
+  build <name>    Create a new container (fails if already exists)
+  rebuild <name>  Destroy and recreate from scratch
   list            List all configured sandboxes and their status
   stop <name>     Stop a running container
   rm <name>       Remove container and custom image
-  config <name>   View or modify JSON configuration`)
+  config <name>   View or modify JSON configuration
+  edit <name>     Open JSON config in $EDITOR
+
+Flags (build/rebuild):
+  --exit          Don't enter the container after building (for scripts)
+  --image <img>   Use a specific base image (overrides JSON)
+  --description   Set description (overrides JSON)
+  --config <path> Use a specific JSON config file
+
+Flags (run):
+  --ephemeral     Run a disposable container (--rm)
+  --config <path> Use a specific JSON config file`)
 }
 
 func fatal(format string, args ...any) {

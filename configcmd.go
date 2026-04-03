@@ -5,9 +5,33 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"strconv"
 	"strings"
 )
+
+func cmdEdit(name string) {
+	path := DefaultConfigPath(name)
+	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
+		fatal("config not found for %q. Create it with: sandbox %s --build", name, name)
+	}
+
+	editor := os.Getenv("EDITOR")
+	if editor == "" {
+		editor = os.Getenv("VISUAL")
+	}
+	if editor == "" {
+		editor = "vi"
+	}
+
+	cmd := exec.Command(editor, path)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		fatal("editor failed: %v", err)
+	}
+}
 
 func cmdConfig(args []string) {
 	// args[0] = name, args[1:] = key, value, etc.

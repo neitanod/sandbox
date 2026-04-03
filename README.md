@@ -18,12 +18,15 @@ Requires Docker to be installed and running.
 cd ~/repos/sketchy-repo
 
 # Create and enter a sandbox (mounts current dir to /workspace)
-sandbox myproject --build
+sandbox myproject --build --description "Sketchy npm package from Reddit"
 
-# Use a specific base image
-sandbox myproject --build --image node:20
+# Or create and enter, using a specific base image
+sandbox myproject --build --image node:20 --description "Sketchy npm package from Reddit"
 
-# Run a command inside
+# Once created, enter the container anytime
+sandbox myproject
+
+# Or run a command inside without entering
 sandbox myproject -- npm install
 
 # Shell commands work too
@@ -32,9 +35,16 @@ sandbox myproject -- "cd src && ls -la"
 # List all sandboxes
 sandbox list
 
+```
+    NAME       IMAGE    STATUS   DESCRIPTION
+    myproject  node:25  running  Sketchy npm package from Reddit
+```
+
 # Stop, remove, clean up
+```
 sandbox stop myproject
-sandbox rm myproject
+sandbox rm myproject            # Config file is kept, you can rebuild later with the same settings
+sandbox rm myproject --forget   # Config file is also destroyed
 ```
 
 ## Usage

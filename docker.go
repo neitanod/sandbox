@@ -125,8 +125,10 @@ func wrapShellCmd(userCmd []string) []string {
 		return userCmd
 	}
 	joined := strings.Join(userCmd, " ")
-	// If the command contains shell operators, wrap in sh -c
-	if needsShell(joined) {
+	// If the command contains shell operators, wrap in sh -c.
+	// Also wrap if it's a single arg containing whitespace (e.g. "php -v"),
+	// which would otherwise be treated as a literal executable name.
+	if needsShell(joined) || (len(userCmd) == 1 && strings.ContainsAny(userCmd[0], " \t")) {
 		return []string{"sh", "-c", joined}
 	}
 	return userCmd
